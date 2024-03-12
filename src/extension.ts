@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
 		text = text + '} ' + os.EOL;
 		
 		// コード実行前の固定メッセージを追加
-		text = text + 'System.out.println("[JavaCodeSelectionRunner]------------------execution result------------------");' + os.EOL;
+		text = text + 'System.out.println("[JavaCodeSelectionRunner]------------------start-----------------");' + os.EOL;
 		
 		// 選択範囲を取得する
 		let cur_selection = vscode.window.activeTextEditor.selection; 
@@ -74,7 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		
 		// コード実行前の固定メッセージを追加
-		text = text + 'System.out.println("[JavaCodeSelectionRunner]----------------------------------------------------");' + os.EOL;
+		text = text + 'System.out.println("[JavaCodeSelectionRunner]-------------------end------------------");' + os.EOL;
 		text = text + 'System.out.println("[JavaCodeSelectionRunner]Press Enter to exit.");' + os.EOL;
 		text = text + 'input();' + os.EOL;
 		text = text + '/ex' + os.EOL;
