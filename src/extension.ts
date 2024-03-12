@@ -114,6 +114,10 @@ export function activate(context: vscode.ExtensionContext) {
 			// Jshellのパス
 			let jshellCommand = path.join(javaHomePath, 'bin', jshell);
 			
+			if(is_windows){
+				jshellCommand = '"' + jshellCommand + '"' ;
+			}
+			
 			// ターミナル上で実行
 			let terminal = vscode.window.createTerminal('JavaCodeSelectionRunner', terminalType);
 			terminal.sendText(jshellCommand + ' ' + '-J-Dfile.encoding=utf8 --execution local' + ' ' + temp_jshell_file + ' && exit' );
