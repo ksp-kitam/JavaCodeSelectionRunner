@@ -1,0 +1,2 @@
+JAVA_VERSION="11.0.0.1"
+MODULES="java.base java.compiler java.logging java.xml java.prefs jdk.internal.jvmstat jdk.attach jdk.compiler jdk.internal.ed jdk.internal.le jdk.internal.opt jdk.jdwp.agent jdk.jdi jdk.jshell"
