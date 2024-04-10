@@ -37,28 +37,45 @@ export function activate(context: vscode.ExtensionContext) {
 		text = text + '    Scanner in = new Scanner(System.in, "MS932"); ' + os.EOL;
 		text = text + '    return in.nextLine(); ' + os.EOL;
 		text = text + '} ' + os.EOL;
+		
 		text = text + 'char inputToChar() { ' + os.EOL;
 		text = text + '    return input().charAt(0); ' + os.EOL;
 		text = text + '} ' + os.EOL;
-		text = text + '' + os.EOL;
+		
 		text = text + 'int inputToInt() { ' + os.EOL;
 		text = text + '    return Integer.parseInt(input()); ' + os.EOL;
 		text = text + '} ' + os.EOL;
-		text = text + '' + os.EOL;
+		
 		text = text + 'double inputToDouble() { ' + os.EOL;
 		text = text + '    return Double.parseDouble(input()); ' + os.EOL;
 		text = text + '} ' + os.EOL;
-		text = text + '' + os.EOL;
+		
 		text = text + 'long inputToLong() { ' + os.EOL;
 		text = text + '    return Long.parseLong(input()); ' + os.EOL;
 		text = text + '} ' + os.EOL;
-		text = text + '' + os.EOL;
+
 		text = text + 'float inputToFloat() { ' + os.EOL;
 		text = text + '    return Float.parseFloat(input()); ' + os.EOL;
 		text = text + '} ' + os.EOL;
-		text = text + '' + os.EOL;
+
 		text = text + 'short inputToShort() { ' + os.EOL;
 		text = text + '    return Short.parseShort(input()); ' + os.EOL;
+		text = text + '} ' + os.EOL;
+		
+		text = text + 'void print(Object obj) { ' + os.EOL;
+		text = text + '     System.out.print(obj);' + os.EOL;
+		text = text + '} ' + os.EOL;
+		
+		text = text + 'void println(Object obj) { ' + os.EOL;
+		text = text + '     System.out.println(obj);' + os.EOL;
+		text = text + '} ' + os.EOL;
+		
+		text = text + 'void printf(java.util.Locale l, String format, Object... args) { ' + os.EOL;
+		text = text + '     System.out.printf(l, format, args);' + os.EOL;
+		text = text + '} ' + os.EOL;
+		
+		text = text + 'void printf(String format, Object... args) { ' + os.EOL;
+		text = text + '     System.out.printf(format, args);' + os.EOL;
 		text = text + '} ' + os.EOL;
 		
 		// コード実行前の固定メッセージを追加
@@ -74,6 +91,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		
 		// コード実行前の固定メッセージを追加
+		text = text + 'System.out.println("");' + os.EOL;
 		text = text + 'System.out.println("[JavaCodeSelectionRunner]-------------------end------------------");' + os.EOL;
 		text = text + 'System.out.println("[JavaCodeSelectionRunner]Press Enter to exit.");' + os.EOL;
 		text = text + 'input();' + os.EOL;
