@@ -5,7 +5,7 @@
 	"displayName": "JavaCode Selection Runner",
 	"description": "This is an extension that uses Jsehll to execute selected parts of Java code.",
 	"publisher": "ksp-kitam",
-	"version": "1.0.0",
+	"version": "1.0.2",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/ksp-kitam/JavaCodeSelectionRunner"

@@ -62,7 +62,12 @@ export function activate(context: vscode.ExtensionContext) {
 		text = text + 'short inputToShort() { ' + os.EOL;
 		text = text + '    return Short.parseShort(input()); ' + os.EOL;
 		text = text + '} ' + os.EOL;
-		
+
+		text = text + 'int makeRandomValue(int start, int end) { ' + os.EOL;
+		text = text + '    java.util.Random rand = new java.util.Random(); ' + os.EOL;
+		text = text + '    return (rand.nextInt(end - start + 1) + start); ' + os.EOL;
+		text = text + '} ' + os.EOL;
+
 		// コード実行前の固定メッセージを追加
 		text = text + 'System.out.println("[JavaCodeSelectionRunner]------------------start-----------------");' + os.EOL;
 		
@@ -70,9 +75,9 @@ export function activate(context: vscode.ExtensionContext) {
 		let cur_selection = vscode.window.activeTextEditor.selection; 
 		//取得した選択範囲のテキストを追加する（選択されていない場合は全て）
 		if(cur_selection.isEmpty){
-			text = text + vscode.window.activeTextEditor.document.getText() + os.EOL;
+			text = text + vscode.window.activeTextEditor.document.getText().replace(/\u3000/g,' ') + os.EOL;
 		}else{
-			text = text + vscode.window.activeTextEditor.document.getText(cur_selection) + os.EOL;
+			text = text + vscode.window.activeTextEditor.document.getText(cur_selection).replace(/\u3000/g,' ') + os.EOL;
 		}
 		
 		// コード実行前の固定メッセージを追加
@@ -82,7 +87,6 @@ export function activate(context: vscode.ExtensionContext) {
 		text = text + 'Scanner in = new Scanner(System.in, "MS932"); ' + os.EOL;
 		text = text + 'return in.nextLine(); ' + os.EOL;
 		text = text + '/ex' + os.EOL;
-		
 		
 		// 一時ファイルのパスを生成
 		let temp_jshell_file = path.join(os.tmpdir(), 'vscode-extension-temp' + Math.random().toString(36).slice(-8) + '.jsh');
