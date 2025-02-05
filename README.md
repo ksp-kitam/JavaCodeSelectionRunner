@@ -1,91 +1,94 @@
 # JavaCode Selection Runner
 
-This is an extension that allows you to execute selected portions of Java code.
+Javaコード内の選択した箇所を実行させる事ができる拡張機能です
 
-It utilizes JShell, which has been available since Java 9.
+Java9から提供されているJshellを利用しています。
 
-## ■ Configuration
+## ■設定
 
-This extension operates using the internally maintained Java.
+本拡張機能は内部的に保持しているJavaで動作します。
 
-The internally maintained Java includes only essential modules.
+内部的に保持しているJavaには最低限のモジュールしか含まれていません。
 
-* Information about the internally maintained Java:
+* 内部的に保持しているJavaの情報
 
-	* Java Type: OpenJDK
+	* Javaの種類：OpenJDK
 
-	* Version: 11
+	* バージョン：21
 
-	* Included Modules: java.base, jdk.jshell
+	* 含まれるモジュール：java.base、jdk.jshell
 
-If you need to make changes, open the VS Code settings and configure as follows:
+変更を行う場合はVScodeの設定画面を開いて下記の通り設定を行ってください。
 
-* Location: Extensions >> JavaSimpleEnvironment >> Java_home
+* 設定箇所：拡張機能 >> JavaSimpleEnvironment >> Java_home
 
-* Value: \<Java Installation Directory\>
+* 設定値：＜Javaのインストールディレクトリ＞
 
-If you prefer to directly edit the settings file (settings.json), add the following:
+設定ファイル（settings.json）を直接編集する場合は下記の内容を追加してください。
 
-* JavaSimpleEnvironment.java_home: "\<Java Installation Directory\>"
+* JavaSimpleEnvironment.java_home: "＜Javaのインストールディレクトリ＞"
 
-## ■ Usage
+## ■使い方
 
-Open a Java file, select the portion you want to execute, right-click, and choose "Run Java Code" from the context menu.
+Javaファイルを開いて、実行したい箇所を選択して右クリックメニューより「Javaコードを実行」を選択してください。
 
-## ■ Available Methods
+## ■利用出来るメソッド
 
-The extension provides the following methods during the execution of Java code:
+拡張機能で下記のメソッドが提供されています。
 
-* `String input()`
+Javaコードの実行時に下記のメソッドが利用できます。
 
-  Creates an object of the Scanner class, calls nextLine(), and retrieves the entered content.
+* String input() 
 
-  The obtained value is returned as a String.
+	Scannerクラスのオブジェクトを作成しnextLine()を呼び出して入力された内容を取得します。
+	
+	取得した値はString型で返却されます。
 
-* `char inputToChar()`
+* char inputToChar()
 
-  Creates an object of the Scanner class, calls nextLine(), and retrieves the entered content.
+	Scannerクラスのオブジェクトを作成しnextLine()を呼び出して入力された内容を取得します。
+	
+	取得した値はchar型で返却されます。
+	
+	String.charAt(0)で入力内容の１文字目が返却されます。
+	
+* int inputToInt()
 
-  The obtained value is returned as a char.
+	Scannerクラスのオブジェクトを作成しnextLine()を呼び出して入力された内容を取得します。
+	
+	取得した値はint型で返却されます。
+	
+	入力内容がInteger.parseInt()で変換出来ない場合はエラーとなります。
+	
+* double inputToDouble()
 
-  The first character of the input content is returned using String.charAt(0).
+	Scannerクラスのオブジェクトを作成しnextLine()を呼び出して入力された内容を取得します。
+	
+	取得した値はdouble型で返却されます。
+	
+	入力内容がDouble.parseDouble()で変換出来ない場合はエラーとなります。
+	
+* long inputToLong() 
 
-* `int inputToInt()`
+	Scannerクラスのオブジェクトを作成しnextLine()を呼び出して入力された内容を取得します。
+	
+	取得した値はlong型で返却されます。
+	
+	入力内容がLong.parseLong()で変換出来ない場合はエラーとなります。
+	
+* float inputToFloat()
 
-  Creates an object of the Scanner class, calls nextLine(), and retrieves the entered content.
+	Scannerクラスのオブジェクトを作成しnextLine()を呼び出して入力された内容を取得します。
+	
+	取得した値はfloat型で返却されます。
+	
+	入力内容がFloat.parseFloat()で変換出来ない場合はエラーとなります。
+	
+* short inputToShort() 
 
-  The obtained value is returned as an int.
-
-  If the input content cannot be converted with Integer.parseInt(), an error occurs.
-
-* `double inputToDouble()`
-
-  Creates an object of the Scanner class, calls nextLine(), and retrieves the entered content.
-
-  The obtained value is returned as a double.
-
-  If the input content cannot be converted with Double.parseDouble(), an error occurs.
-
-* `long inputToLong()`
-
-  Creates an object of the Scanner class, calls nextLine(), and retrieves the entered content.
-
-  The obtained value is returned as a long.
-
-  If the input content cannot be converted with Long.parseLong(), an error occurs.
-
-* `float inputToFloat()`
-
-  Creates an object of the Scanner class, calls nextLine(), and retrieves the entered content.
-
-  The obtained value is returned as a float.
-
-  If the input content cannot be converted with Float.parseFloat(), an error occurs.
-
-* `short inputToShort()`
-
-  Creates an object of the Scanner class, calls nextLine(), and retrieves the entered content.
-
-  The obtained value is returned as a short.
-
-  If the input content cannot be converted with Short.parseShort(), an error occurs.
+	Scannerクラスのオブジェクトを作成しnextLine()を呼び出して入力された内容を取得します。
+	
+	取得した値はshort型で返却されます。
+	
+	入力内容がShort.parseShort()で変換出来ない場合はエラーとなります。
+	

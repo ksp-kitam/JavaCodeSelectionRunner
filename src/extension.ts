@@ -75,8 +75,18 @@ export function activate(context: vscode.ExtensionContext) {
 		let cur_selection = vscode.window.activeTextEditor.selection; 
 		//取得した選択範囲のテキストを追加する（選択されていない場合は全て）
 		if(cur_selection.isEmpty){
-			text = text + vscode.window.activeTextEditor.document.getText().replace(/\u3000/g,' ') + os.EOL;
+			// ファイル全体の場合
+			let inputText = vscode.window.activeTextEditor.document.getText().replace(/\u3000/g,' ');
+			// 入力内容がmainメソッドを含むクラス定義になっている場合はクラス名を抜き出す
+			let className = checkJavaClassWithMain(inputText);
+			// 入力内容を追記
+			text = text + inputText + os.EOL;
+			// mainメソッドを含むクラスが定義されている場合は呼び出し処理を追記する
+			if(className){
+				 text = text + className + '.main(new String[]{});' + os.EOL;
+			}
 		}else{
+			// 選択されたエリアのみの場合
 			text = text + vscode.window.activeTextEditor.document.getText(cur_selection).replace(/\u3000/g,' ') + os.EOL;
 		}
 		
@@ -99,11 +109,11 @@ export function activate(context: vscode.ExtensionContext) {
 			let jshell = '';
 			if(is_windows){
 				terminalType = 'cmd.exe';
-				jdkType = 'jdk-11_win';
+				jdkType = 'jre_win';
 				jshell = 'jshell.exe';
 			} else {
 				terminalType = 'bash';
-				jdkType = 'jdk-11_linux';
+				jdkType = 'jre_linux';
 				jshell = 'jshell';
 			}
 		
@@ -155,5 +165,22 @@ function chmodFolder(dirPath: string, mode: string) {
 	fsex.chmod(dirPath, mode);
 }
 
+
+function checkJavaClassWithMain(code:string) {
+	// クラス定義の正規表現（クラス名を取得）
+	const classPattern = /\bpublic\s+class\s+(\w+)\s*\{([\s\S]*?)\}/g;
+	let match;
+	while ((match = classPattern.exec(code)) !== null) {
+		let className = match[1]; // クラス名
+		let classBody = match[2]; // クラスの中身
+		
+		// mainメソッドの正規表現
+		const mainPattern = /\bpublic\s+static\s+void\s+main\s*\(\s*String\s*\[\s*\]\s*\w*\)/;
+		if (mainPattern.test(classBody)) {
+			return className; // クラス名を返す
+		}
+	}
+	return null; // 該当するクラスがない場合
+}
 
 

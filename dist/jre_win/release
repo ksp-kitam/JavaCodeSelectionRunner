@@ -1,0 +1,2 @@
+JAVA_VERSION="21"
+MODULES="java.base java.compiler java.logging java.xml java.prefs jdk.internal.jvmstat jdk.attach jdk.internal.opt jdk.zipfs jdk.compiler jdk.internal.ed jdk.internal.le jdk.jdwp.agent jdk.jdi jdk.jshell"
