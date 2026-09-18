@@ -75,12 +75,17 @@ async function formatDocument(
 	const sourceText = document.getText();
 
 	try {
-		const formattedText = await runFormatter(
+		const rawFormattedText = await runFormatter(
 			getJavaCommandPath(javaHomePath, 'java'),
 			formatterJarPath,
 			extraArguments,
 			sourceText
 		);
+
+		// 整形結果の改行コードを、元のドキュメントの設定に合わせる
+		const formattedText = document.eol === vscode.EndOfLine.CRLF
+			? rawFormattedText.replace(/\r?\n/g, '\r\n')
+			: rawFormattedText.replace(/\r\n/g, '\n');
 
 		// 整形結果に変化が無い場合は編集を行わない
 		if (formattedText === sourceText) {

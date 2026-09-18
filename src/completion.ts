@@ -101,18 +101,26 @@ class CompletionHelper {
 	private pendingBuffer = '';
 	private pendingResolve: ((line: string) => void) | undefined;
 	private requestQueue: Promise<unknown> = Promise.resolve();
+	private latestRequestId = 0;
 	private isUnavailable = false;
 	private hasNotifiedError = false;
 
 	// 補完候補を取得します。取得できない場合は undefined を返します。
 	complete(code: string, cursor: number): Promise<{ anchor: number, suggestions: string[] } | undefined> {
 		// 要求が重ならないよう、直列に処理する
-		const next = this.requestQueue.then(() => this.completeInternal(code, cursor));
+		const requestId = ++this.latestRequestId;
+		const next = this.requestQueue.then(() => this.completeInternal(code, cursor, requestId));
 		this.requestQueue = next.catch(() => undefined);
 		return next;
 	}
 
-	private async completeInternal(code: string, cursor: number) {
+	private async completeInternal(code: string, cursor: number, requestId: number) {
+
+		// 入力が続いて新しい要求が来ている場合は、古い要求を送らずに捨てる
+		if (requestId !== this.latestRequestId) {
+			return undefined;
+		}
+
 		const helperProcess = this.ensureProcess();
 		if (typeof helperProcess === 'undefined') {
 			return undefined;
