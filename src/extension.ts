@@ -4,6 +4,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { resolveJavaHome, getJavaCommandPath, quotePath, isWindows } from './javaHome';
+import { registerFormatter } from './formatter';
 
 // 一時ファイルの接頭辞と拡張子（起動時の掃除にも使用する）
 const TEMP_FILE_PREFIX = 'vscode-extension-temp';
@@ -16,13 +18,16 @@ const TEMP_FILE_EXPIRE_MS = 24 * 60 * 60 * 1000;
 // 拡張機能は、コマンドが初めて実行されたときにアクティブ化されます。
 export function activate(context: vscode.ExtensionContext) {
 
-	const is_windows = process.platform==='win32'
+	const is_windows = isWindows;
 
 	// 標準入力の文字コード（Windowsのコンソールは MS932、それ以外は UTF-8 を前提とする）
 	const inputCharset = is_windows ? 'MS932' : 'UTF-8';
 
 	// 前回までに残った一時ファイルを掃除する
 	cleanUpTempFiles();
+
+	// コード整形機能を登録する
+	registerFormatter(context);
 
 	// 「JavaCodeSelectionRunner.RunCode」で実行される処理
 	let disposable = vscode.commands.registerCommand('JavaCodeSelectionRunner.RunCode', function () {
@@ -121,47 +126,18 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 		
-			let terminalType = '';
-			let jdkType = '';
-			let jshell = '';
-			if(is_windows){
-				terminalType = 'cmd.exe';
-				jdkType = 'jre_win';
-				jshell = 'jshell.exe';
-			} else {
-				terminalType = 'bash';
-				jdkType = 'jre_linux';
-				jshell = 'jshell';
-			}
+			// 使用するターミナル
+			let terminalType = is_windows ? 'cmd.exe' : 'bash';
 		
-			// JavaHomeのパス
-			let javaHomePath = vscode.workspace.getConfiguration('JavaCodeSelectionRunner').get('java_home', '');
-			if(javaHomePath == '' ){
-				// 同梱しているJavaの配置元
-				let bundledJdkPath = path.join(__dirname, jdkType);
-				if (!fs.existsSync(bundledJdkPath)){
-					// 同梱しているJavaが無い場合は設定が必要である旨を通知する
-					vscode.window.showErrorMessage(
-						'Java for this platform is not bundled. Please set "JavaCodeSelectionRunner.java_home" in the settings.'
-					);
-					return;
-				}
-				vscode.window.showInformationMessage('It runs on Java that is maintained internally.');
-				javaHomePath = path.join(os.tmpdir(), jdkType);
-				if (!fs.existsSync(javaHomePath)){
-					try{
-						let fsex = require('fs-extra');
-						fsex.copySync(bundledJdkPath, javaHomePath );
-						chmodFolder(javaHomePath, '755');
-					}catch(e){
-						vscode.window.showErrorMessage('Failed to prepare the bundled Java. : ' + String(e));
-						return;
-					}
-				}
+			// 使用するJavaを決定する（同梱Javaの展開もここで行う）
+			let javaHomePath = resolveJavaHome();
+			if(typeof javaHomePath === 'undefined'){
+				// エラーメッセージは resolveJavaHome の中で表示済み
+				return;
 			}
 			
 			// Jshellのパス
-			let jshellCommand = quotePath(path.join(javaHomePath, 'bin', jshell));
+			let jshellCommand = quotePath(getJavaCommandPath(javaHomePath, 'jshell'));
 			
 			// ターミナル上で実行
 			let terminal = vscode.window.createTerminal('JavaCodeSelectionRunner', terminalType);
@@ -176,11 +152,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 // このメソッドは、拡張機能が非アクティブ化されたときに呼び出されます。
 export function deactivate() {}
-
-// パスを二重引用符で囲みます（空白を含むパスに対応するため）。
-function quotePath(targetPath: string) {
-	return '"' + targetPath + '"';
-}
 
 // 一時ディレクトリに残っている、本拡張機能が作成した古い一時ファイルを削除します。
 function cleanUpTempFiles() {
@@ -205,22 +176,6 @@ function cleanUpTempFiles() {
 		// 一時ディレクトリを参照できない場合も処理を継続する
 	}
 }
-
-// フォルダのパーミッションを変更します。
-function chmodFolder(dirPath: string, mode: string) {
-	const items = fs.readdirSync(dirPath);
-	for (const item of items) {
-		const target = path.join(dirPath, item);
-		if (fs.lstatSync(target).isDirectory()) {
-			chmodFolder(target, mode)
-		} else {
-			// 実行前に権限付与が完了している必要があるため同期版を使用する
-			fs.chmodSync(target, mode);
-		}
-	}
-	fs.chmodSync(dirPath, mode);
-}
-
 
 // 文字列リテラル・文字リテラルを除いた範囲の全角スペースを半角スペースへ置換します。
 // （コード中の全角スペースはJavaの文法上エラーとなるため置換するが、

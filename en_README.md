@@ -35,6 +35,22 @@ If you prefer to directly edit the settings file (settings.json), add the follow
 
 * JavaCodeSelectionRunner.java_home: "\<Java Installation Directory\>"
 
+## ■ Formatting
+
+You can format Java code with google-java-format.
+
+* Format the whole file
+
+	Choose "Format Document" from the right-click menu (default key binding: Shift+Alt+F).
+
+* Format the selected range only
+
+	Select the part you want to format and choose "Format Selection" from the right-click menu (default key binding: Ctrl+K Ctrl+F).
+
+The formatting style is Google Java Style (2-space indentation).
+
+Formatting also uses the Java bundled with this extension. On platforms other than Windows, the java_home setting is required.
+
 ## ■ Usage
 
 Open a Java file, select the portion you want to execute, right-click, and choose "Run Java Code" from the context menu.
