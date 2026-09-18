@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { resolveJavaHome, getJavaCommandPath, quotePath, isWindows } from './javaHome';
 import { registerFormatter } from './formatter';
+import { registerCompletion } from './completion';
 
 // 一時ファイルの接頭辞と拡張子（起動時の掃除にも使用する）
 const TEMP_FILE_PREFIX = 'vscode-extension-temp';
@@ -28,6 +29,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// コード整形機能を登録する
 	registerFormatter(context);
+
+	// 入力補完機能を登録する
+	registerCompletion(context);
 
 	// 「JavaCodeSelectionRunner.RunCode」で実行される処理
 	let disposable = vscode.commands.registerCommand('JavaCodeSelectionRunner.RunCode', function () {

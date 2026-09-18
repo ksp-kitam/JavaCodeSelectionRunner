@@ -2,13 +2,14 @@
 
 `JavaCodeSelectionRunner` の設計書と課題一覧。
 
-- 対象バージョン：1.1.0
+- 対象バージョン：1.2.0
 - 作成日：2026-09-18（同日に課題14件を修正）
 
 | ファイル | 内容 |
 |----------|------|
 | [extension.md](extension.md) | `src/extension.ts` のプログラム設計書（概要・処理フロー・実装詳細・エラーハンドリング） |
 | [formatter.md](formatter.md) | コード整形機能（`src/formatter.ts` / `src/javaHome.ts`）のプログラム設計書 |
+| [completion.md](completion.md) | 入力補完機能（`src/completion.ts` / `src/java/CompletionHelper.java`）のプログラム設計書 |
 | [課題一覧.md](%E8%AA%B2%E9%A1%8C%E4%B8%80%E8%A6%A7.md) | 実装課題14件と対応状況（**全件対応済み**） |
 | [機能追加の調査.md](%E6%A9%9F%E8%83%BD%E8%BF%BD%E5%8A%A0%E3%81%AE%E8%AA%BF%E6%9F%BB.md) | シンタックスハイライト／入力補完／コード整形の実現方法と工数の調査 |
 

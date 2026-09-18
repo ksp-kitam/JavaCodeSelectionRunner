@@ -35,6 +35,30 @@ If you prefer to directly edit the settings file (settings.json), add the follow
 
 * JavaCodeSelectionRunner.java_home: "\<Java Installation Directory\>"
 
+## ■ Code Completion
+
+Shows completion candidates while you type Java code.
+
+For example, typing `System.` shows `out` and `err` as candidates.
+
+* Completion uses the Java bundled with this extension (via the JShell analysis API).
+
+* A helper process starts on the first completion, so the first request takes a few seconds. After that, the resident process responds quickly.
+
+* You can turn completion off in the settings.
+
+	* Location: Extensions >> JavaCodeSelectionRunner >> Enable completion
+
+	* settings.json: `JavaCodeSelectionRunner.enable_completion: false`
+
+### Limitations
+
+Because the JShell analysis API is used, candidates are limited in the following ways.
+
+* Files written as a sequence of statements (such as `.jsh` files) get the best results.
+
+* Inside a class body (for example within a method), candidates are computed from the current line only. Members of variables declared earlier in the same method may not appear.
+
 ## ■ Formatting
 
 You can format Java code with google-java-format.

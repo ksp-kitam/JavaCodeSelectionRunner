@@ -3,7 +3,7 @@
 	"displayName": "JavaCode Selection Runner",
 	"description": "This is an extension that uses Jsehll to execute selected parts of Java code.",
 	"publisher": "ksp-kitam",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/ksp-kitam/JavaCodeSelectionRunner"
@@ -34,6 +34,11 @@
 					"type": "string",
 					"default": "",
 					"description": "Java installation directory"
+				},
+				"JavaCodeSelectionRunner.enable_completion": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable code completion using the bundled JShell analysis API"
 				}
 			}
 		},
@@ -62,14 +67,15 @@
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run package",
-		"compile": "webpack",
+		"compile": "npm run copy-tools && webpack",
 		"watch": "webpack --watch",
-		"package": "webpack --mode production --devtool hidden-source-map",
+		"package": "npm run copy-tools && webpack --mode production --devtool hidden-source-map",
 		"compile-tests": "tsc -p . --outDir out",
 		"watch-tests": "tsc -p . -w --outDir out",
 		"pretest": "npm run compile-tests && npm run compile && npm run lint",
 		"lint": "eslint src --ext ts",
-		"test": "node ./out/test/runTest.js"
+		"test": "node ./out/test/runTest.js",
+		"copy-tools": "node ./scripts/copy-tools.js"
 	},
 	"devDependencies": {
 		"@types/mocha": "^10.0.2",
