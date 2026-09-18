@@ -20,13 +20,13 @@ The internally maintained Java includes only essential modules.
 
 If you need to make changes, open the VS Code settings and configure as follows:
 
-* Location: Extensions >> JavaSimpleEnvironment >> Java_home
+* Location: Extensions >> JavaCodeSelectionRunner >> Java home
 
 * Value: \<Java Installation Directory\>
 
 If you prefer to directly edit the settings file (settings.json), add the following:
 
-* JavaSimpleEnvironment.java_home: "\<Java Installation Directory\>"
+* JavaCodeSelectionRunner.java_home: "\<Java Installation Directory\>"
 
 ## ■ Usage
 

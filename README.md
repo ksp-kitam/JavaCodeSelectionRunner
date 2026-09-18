@@ -20,13 +20,13 @@ Jshellを利用しています。
 
 変更を行う場合はVScodeの設定画面を開いて下記の通り設定を行ってください。
 
-* 設定箇所：拡張機能 >> JavaSimpleEnvironment >> Java_home
+* 設定箇所：拡張機能 >> JavaCodeSelectionRunner >> Java home
 
 * 設定値：＜Javaのインストールディレクトリ＞
 
 設定ファイル（settings.json）を直接編集する場合は下記の内容を追加してください。
 
-* JavaSimpleEnvironment.java_home: "＜Javaのインストールディレクトリ＞"
+* JavaCodeSelectionRunner.java_home: "＜Javaのインストールディレクトリ＞"
 
 ## ■使い方
 
