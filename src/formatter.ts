@@ -2,16 +2,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as cp from 'child_process';
 import { resolveJavaHome, getJavaCommandPath } from './javaHome';
 
 // 同梱している整形ツール（Apache License 2.0）
 const FORMATTER_JAR_NAME = 'google-java-format-1.36.1-all-deps.jar';
-
-// 整形用の一時ファイル
-const TEMP_FILE_PREFIX = 'vscode-extension-format';
-const TEMP_FILE_SUFFIX = '.java';
 
 // JDK16以降で google-java-format を動かすために必要なオプション
 // （jarのマニフェストにも Add-Exports が指定されているが、明示的に付与しておく）
@@ -24,8 +19,8 @@ const ADD_EXPORTS_OPTIONS = [
 	'--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
 ];
 
-// 標準出力の上限（大きなファイルでも切れないように余裕を持たせる）
-const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
+// 整形処理の待ち時間の上限（ミリ秒）
+const FORMAT_TIMEOUT_MS = 30000;
 
 
 // 整形機能をVS Codeへ登録します。
@@ -43,7 +38,11 @@ export function registerFormatter(context: vscode.ExtensionContext) {
 		provideDocumentRangeFormattingEdits(document: vscode.TextDocument, range: vscode.Range) {
 			const offset = document.offsetAt(range.start);
 			const length = document.offsetAt(range.end) - offset;
+			if (length <= 0) {
+				return [];
+			}
 			// 範囲指定の整形では、ファイル全体を渡したうえで対象範囲のみを整形する
+			// （--offset / --length は 0 起点の文字位置と文字数。整形結果はファイル全文が返る）
 			return formatDocument(document, ['--offset', String(offset), '--length', String(length)]);
 		}
 	});
@@ -73,25 +72,14 @@ async function formatDocument(
 		return [];
 	}
 
-	// 整形対象を一時ファイルへ書き出す
 	const sourceText = document.getText();
-	const tempFilePath = path.join(
-		os.tmpdir(),
-		TEMP_FILE_PREFIX + Math.random().toString(36).slice(-8) + TEMP_FILE_SUFFIX
-	);
-	try {
-		fs.writeFileSync(tempFilePath, sourceText, 'utf8');
-	} catch (e) {
-		vscode.window.showErrorMessage('Failed to create a temporary file. : ' + String(e));
-		return [];
-	}
 
 	try {
 		const formattedText = await runFormatter(
 			getJavaCommandPath(javaHomePath, 'java'),
 			formatterJarPath,
 			extraArguments,
-			tempFilePath
+			sourceText
 		);
 
 		// 整形結果に変化が無い場合は編集を行わない
@@ -109,24 +97,17 @@ async function formatDocument(
 	} catch (e) {
 		vscode.window.showErrorMessage('Failed to format the Java code. : ' + String(e));
 		return [];
-
-	} finally {
-		// 一時ファイルを削除する
-		try {
-			fs.unlinkSync(tempFilePath);
-		} catch (e) {
-			// 削除に失敗しても処理は継続する
-		}
 	}
 }
 
 
 // google-java-format を実行し、整形後のソースコードを返します。
+// 対象のコードは標準入力で渡し、結果を標準出力から受け取ります（一時ファイルを作りません）。
 function runFormatter(
 	javaCommandPath: string,
 	formatterJarPath: string,
 	extraArguments: string[],
-	targetFilePath: string
+	sourceText: string
 ): Promise<string> {
 
 	const args = [
@@ -135,23 +116,57 @@ function runFormatter(
 		'-jar',
 		formatterJarPath,
 		...extraArguments,
-		targetFilePath
+		'-' // 標準入力から読み込み、標準出力へ出力する
 	];
 
 	return new Promise<string>((resolve, reject) => {
-		cp.execFile(
-			javaCommandPath,
-			args,
-			{ encoding: 'buffer', windowsHide: true, maxBuffer: MAX_OUTPUT_BYTES },
-			(error, stdout, stderr) => {
-				if (error) {
-					// 整形ツールは構文エラーなどを標準エラー出力へ出力する
-					const message = stderr.toString('utf8').trim();
-					reject(new Error(message === '' ? String(error) : message));
+
+		const formatterProcess = cp.spawn(javaCommandPath, args, { windowsHide: true });
+
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		let isSettled = false;
+
+		const settle = (action: () => void) => {
+			if (isSettled) {
+				return;
+			}
+			isSettled = true;
+			clearTimeout(timer);
+			action();
+		};
+
+		const timer = setTimeout(() => {
+			settle(() => {
+				formatterProcess.kill();
+				reject(new Error('The formatter did not respond.'));
+			});
+		}, FORMAT_TIMEOUT_MS);
+
+		formatterProcess.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+		// 標準エラー出力も読み捨てずに受け取る（読まないとパイプが詰まって処理が止まるため）
+		formatterProcess.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+		formatterProcess.on('error', (error) => {
+			settle(() => reject(error));
+		});
+
+		formatterProcess.on('close', (code) => {
+			settle(() => {
+				if (code === 0) {
+					resolve(Buffer.concat(stdoutChunks).toString('utf8'));
 					return;
 				}
-				resolve(stdout.toString('utf8'));
-			}
-		);
+				// 整形ツールは構文エラーなどを標準エラー出力へ出力する
+				const message = Buffer.concat(stderrChunks).toString('utf8').trim();
+				reject(new Error(message === '' ? 'exit code ' + code : message));
+			});
+		});
+
+		// 標準入力の書き込み失敗（相手プロセスの異常終了など）を捕捉する
+		formatterProcess.stdin.on('error', (error) => {
+			settle(() => reject(error));
+		});
+		formatterProcess.stdin.end(sourceText, 'utf8');
 	});
 }

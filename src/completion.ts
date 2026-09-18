@@ -11,6 +11,10 @@ const HELPER_SOURCE_NAME = 'CompletionHelper.java';
 // ヘルパーの応答を待つ上限（ミリ秒）
 const RESPONSE_TIMEOUT_MS = 5000;
 
+// 解析対象として送るコードの上限（文字数）
+// 大きなファイルでも入力のたびに全文を送らないようにするための制限
+const MAX_ANALYZE_LENGTH = 20000;
+
 
 // 補完機能をVS Codeへ登録します。
 export function registerCompletion(context: vscode.ExtensionContext) {
@@ -21,7 +25,11 @@ export function registerCompletion(context: vscode.ExtensionContext) {
 	const provider = vscode.languages.registerCompletionItemProvider(
 		'java',
 		{
-			async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position) {
+			async provideCompletionItems(
+				document: vscode.TextDocument,
+				position: vscode.Position,
+				token: vscode.CancellationToken
+			) {
 
 				// 設定で無効化されている場合は何も返さない
 				if (!vscode.workspace.getConfiguration('JavaCodeSelectionRunner').get('enable_completion', true)) {
@@ -30,16 +38,35 @@ export function registerCompletion(context: vscode.ExtensionContext) {
 
 				// カーソル位置までのコードを解析対象とする
 				const offset = document.offsetAt(position);
-				const code = document.getText().slice(0, offset);
+				const wholePrefix = document.getText().slice(0, offset);
 
-				const result = await helper.complete(code, offset);
-				if (typeof result === 'undefined') {
+				// 大きなファイルでは、カーソル手前の一定量だけを送る（行の先頭に合わせて切り出す）
+				let analyzeStart = 0;
+				if (wholePrefix.length > MAX_ANALYZE_LENGTH) {
+					const roughStart = wholePrefix.length - MAX_ANALYZE_LENGTH;
+					const lineBreakIndex = wholePrefix.indexOf('\n', roughStart);
+					analyzeStart = lineBreakIndex < 0 ? roughStart : lineBreakIndex + 1;
+				}
+				const code = wholePrefix.slice(analyzeStart);
+
+				if (token.isCancellationRequested) {
 					return undefined;
 				}
 
-				// アンカー位置から現在位置までが、候補で置き換えられる範囲になる
-				const replaceStart = document.positionAt(Math.min(Math.max(result.anchor, 0), offset));
-				const replaceRange = new vscode.Range(replaceStart, position);
+				const result = await helper.complete(code, code.length);
+				if (typeof result === 'undefined' || token.isCancellationRequested) {
+					return undefined;
+				}
+
+				// 切り出した分だけアンカー位置を元の位置へ戻す
+				result.anchor = result.anchor + analyzeStart;
+
+				// アンカー位置から現在位置までが、候補で置き換えられる範囲になる。
+				// VS Code の仕様では、補完の range は「単一行」かつ「補完要求位置を含む」必要があるため、
+				// 開始位置をカーソル行の先頭までに制限する。
+				const lineStartOffset = document.offsetAt(position.with(position.line, 0));
+				const anchorOffset = Math.min(Math.max(result.anchor, lineStartOffset), offset);
+				const replaceRange = new vscode.Range(document.positionAt(anchorOffset), position);
 
 				return result.suggestions.map((suggestion) => {
 					const item = new vscode.CompletionItem(suggestion, guessCompletionKind(suggestion));
@@ -75,6 +102,7 @@ class CompletionHelper {
 	private pendingResolve: ((line: string) => void) | undefined;
 	private requestQueue: Promise<unknown> = Promise.resolve();
 	private isUnavailable = false;
+	private hasNotifiedError = false;
 
 	// 補完候補を取得します。取得できない場合は undefined を返します。
 	complete(code: string, cursor: number): Promise<{ anchor: number, suggestions: string[] } | undefined> {
@@ -114,7 +142,13 @@ class CompletionHelper {
 				resolve(line);
 			};
 
-			helperProcess.stdin.write(request + '\n', 'utf8');
+			try {
+				helperProcess.stdin.write(request + '\n', 'utf8');
+			} catch (e) {
+				clearTimeout(timer);
+				this.pendingResolve = undefined;
+				reject(e instanceof Error ? e : new Error(String(e)));
+			}
 		});
 	}
 
@@ -151,8 +185,17 @@ class CompletionHelper {
 
 			helperProcess.stdout.setEncoding('utf8');
 			helperProcess.stdout.on('data', (chunk: string) => this.receive(chunk));
+
+			// 標準エラー出力も受け取る。読まないとパイプが詰まってヘルパーが停止するため。
+			// 起動に失敗した場合（コンパイルエラーなど）は最初の1回だけ内容を通知する。
+			helperProcess.stderr.setEncoding('utf8');
+			helperProcess.stderr.on('data', (chunk: string) => this.receiveError(chunk));
+
 			helperProcess.on('exit', () => { this.helperProcess = undefined; });
 			helperProcess.on('error', () => { this.helperProcess = undefined; });
+
+			// 標準入力への書き込み失敗（相手プロセスの異常終了など）で例外が出ないようにする
+			helperProcess.stdin.on('error', () => { this.helperProcess = undefined; });
 
 			this.helperProcess = helperProcess;
 			return helperProcess;
@@ -163,6 +206,19 @@ class CompletionHelper {
 		}
 	}
 
+	// ヘルパーの標準エラー出力を受け取ります（起動失敗時のみ1度だけ通知します）。
+	private receiveError(chunk: string) {
+		if (this.hasNotifiedError) {
+			return;
+		}
+		this.hasNotifiedError = true;
+		const message = chunk.trim();
+		if (message !== '') {
+			vscode.window.showWarningMessage('The completion helper reported an error. : ' + message.split('\n')[0]);
+		}
+	}
+
+
 	// ヘルパーからの出力を1行単位に組み立てます。
 	private receive(chunk: string) {
 		this.pendingBuffer += chunk;
@@ -171,10 +227,14 @@ class CompletionHelper {
 			const line = this.pendingBuffer.slice(0, newLineIndex).replace(/\r$/, '');
 			this.pendingBuffer = this.pendingBuffer.slice(newLineIndex + 1);
 
-			const resolvePending = this.pendingResolve;
-			this.pendingResolve = undefined;
-			if (typeof resolvePending !== 'undefined') {
-				resolvePending(line);
+			// 応答以外の出力（JVMの警告など）が混ざっても取り違えないように、
+			// プロトコルで定めた書き出しだけを応答として扱う
+			if (isProtocolResponse(line)) {
+				const resolvePending = this.pendingResolve;
+				this.pendingResolve = undefined;
+				if (typeof resolvePending !== 'undefined') {
+					resolvePending(line);
+				}
 			}
 
 			newLineIndex = this.pendingBuffer.indexOf('\n');
@@ -198,6 +258,12 @@ class CompletionHelper {
 	dispose() {
 		this.stopProcess();
 	}
+}
+
+
+// プロトコルで定めた応答かどうかを判定します。
+function isProtocolResponse(line: string): boolean {
+	return line.startsWith('OK ') || line === 'OK' || line.startsWith('ERR ') || line === 'PONG';
 }
 
 
