@@ -16,7 +16,14 @@ Jshellを利用しています。
 
 	* バージョン：21
 
-	* 含まれるモジュール：java.base、jdk.jshell
+	* 含まれるモジュール：java.base、java.compiler、java.logging、java.xml、java.prefs、jdk.internal.jvmstat、jdk.attach、jdk.internal.opt、jdk.zipfs、jdk.compiler、jdk.internal.ed、jdk.internal.le、jdk.jdwp.agent、jdk.jdi、jdk.jshell
+
+* 対応プラットフォーム
+
+	* 内部的に保持しているJavaは **Windows用のみ** です。
+
+	* **Windows以外（Linux / macOS）で利用する場合は、下記の java_home の設定が必須です。**
+	  設定がない場合は「Java for this platform is not bundled.」というエラーを表示して処理を中断します。
 
 変更を行う場合はVScodeの設定画面を開いて下記の通り設定を行ってください。
 
@@ -83,6 +90,12 @@ Javaコードの実行時に下記のメソッドが利用できます。
 	取得した値はfloat型で返却されます。
 	
 	入力内容がFloat.parseFloat()で変換出来ない場合はエラーとなります。
+	
+* int makeRandomValue(int start, int end)
+
+	start から end までの範囲（両端を含む）の整数の乱数を返します。
+	
+	java.util.Random の nextInt() を利用しています。
 	
 * short inputToShort() 
 

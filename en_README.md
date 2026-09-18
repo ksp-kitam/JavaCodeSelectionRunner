@@ -16,7 +16,14 @@ The internally maintained Java includes only essential modules.
 
 	* Version: 21
 
-	* Included Modules: java.base, jdk.jshell
+	* Included Modules: java.base, java.compiler, java.logging, java.xml, java.prefs, jdk.internal.jvmstat, jdk.attach, jdk.internal.opt, jdk.zipfs, jdk.compiler, jdk.internal.ed, jdk.internal.le, jdk.jdwp.agent, jdk.jdi, jdk.jshell
+
+* Supported platforms
+
+	* The internally maintained Java is **for Windows only**.
+
+	* **On platforms other than Windows (Linux / macOS), the java_home setting below is required.**
+	  Without it, the extension shows "Java for this platform is not bundled." and stops.
 
 If you need to make changes, open the VS Code settings and configure as follows:
 
@@ -81,6 +88,12 @@ The extension provides the following methods during the execution of Java code:
   The obtained value is returned as a float.
 
   If the input content cannot be converted with Float.parseFloat(), an error occurs.
+
+* `int makeRandomValue(int start, int end)`
+
+  Returns a random integer between start and end (both inclusive).
+
+  Uses nextInt() of java.util.Random.
 
 * `short inputToShort()`
 
