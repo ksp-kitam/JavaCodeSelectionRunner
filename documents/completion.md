@@ -1,4 +1,4 @@
-# プログラム設計書：入力補完（src/completion.ts、src/java/CompletionHelper.java）
+# プログラム設計書：入力補完（src/completion.ts、src/analysisHelper.ts、src/java/AnalysisHelper.java）
 
 ## 1. 概要
 Java コードの入力中に候補を表示する機能。`System.` と入力すると `out` や `err` が候補に出る。
@@ -12,9 +12,9 @@ Java コードの入力中に候補を表示する機能。`System.` と入力�
 ## 2. 基本情報
 | 項目 | 内容 |
 |------|------|
-| 実装ファイル | `src/completion.ts`（VS Code側）／`src/java/CompletionHelper.java`（Java側） |
-| 配置 | ヘルパーのソースはビルド時に `dist/tools/CompletionHelper.java` へ複製する（`scripts/copy-tools.js`） |
-| 実行方法 | 単一ファイルソースコードランチャー（`java CompletionHelper.java`）。事前コンパイル不要 |
+| 実装ファイル | `src/completion.ts`（補完の処理）／`src/analysisHelper.ts`（ヘルパーのプロセス管理。エラーチェックと共用）／`src/java/AnalysisHelper.java`（Java側） |
+| 配置 | ヘルパーのソースはビルド時に `dist/tools/AnalysisHelper.java` へ複製する（`scripts/copy-tools.js`） |
+| 実行方法 | 単一ファイルソースコードランチャー（`java AnalysisHelper.java`）。事前コンパイル不要 |
 | 有効化 | `activationEvents: ["onLanguage:java"]` |
 | 設定 | `JavaCodeSelectionRunner.enable_completion`（既定 `true`） |
 
@@ -23,7 +23,7 @@ Java コードの入力中に候補を表示する機能。`System.` と入力�
 ```mermaid
 graph LR
   VSCODE["VS Code<br/>CompletionItemProvider"]
-  HELPER["CompletionHelper<br/>（Java・常駐）"]
+  HELPER["AnalysisHelper<br/>（Java・常駐）"]
   JSHELL["jdk.jshell<br/>SourceCodeAnalysis"]
 
   VSCODE -->|"COMPLETE &lt;cursor&gt; &lt;Base64のコード&gt;"| HELPER
@@ -80,23 +80,29 @@ graph LR
 | 大文字で始まる | クラス |
 | それ以外 | フィールド |
 
-### 5.3 CompletionHelper クラス（プロセス管理）
+### 5.3 AnalysisHelper クラス（プロセス管理：src/analysisHelper.ts）
+
+v1.3.0 でエラーチェック（[diagnostics.md](diagnostics.md)）と共用するため、`completion.ts` から `analysisHelper.ts` へ移した。
+インスタンスは `extension.ts` の `activate()` で1つだけ生成し、補完とエラーチェックへ渡す。
+
 | 項目 | 内容 |
 |------|------|
-| 起動 | 初回の補完時に `cp.spawn` で起動する（遅延起動） |
-| 起動コマンド | `<javaHome>/bin/java --add-modules jdk.jshell -Dfile.encoding=UTF-8 <dist/tools/CompletionHelper.java>` |
+| 起動 | 初回の要求時（補完またはエラーチェック）に `cp.spawn` で起動する（遅延起動） |
+| 起動コマンド | `<javaHome>/bin/java --add-modules jdk.jshell -Dfile.encoding=UTF-8 <dist/tools/AnalysisHelper.java>` |
 | 直列化 | 要求が重ならないよう、`requestQueue` で1件ずつ処理する |
-| 古い要求の破棄 | 送信前に自分が最新の要求かを確認し、入力が続いている場合は送らずに捨てる |
+| 古い要求の破棄 | 送信前に、同じ種類（key）の要求の中で自分が最新かを確認し、入力が続いている場合は送らずに捨てる。key は補完が `complete`、エラーチェックが `check:<ファイルのURI>`（種類が違う要求同士では破棄しない） |
 | 標準エラー出力 | **読み捨てずに受け取る**（読まないとパイプが詰まってヘルパーが停止するため）。起動失敗時は最初の1回だけ警告として通知する |
 | 応答行の判定 | `OK` / `ERR` / `PONG` で始まる行だけを応答として扱う（JVMの警告などが混ざっても取り違えないようにするため） |
-| タイムアウト | 5秒で応答が無ければ失敗扱いとし、プロセスを停止する（次回の補完で再起動される） |
+| タイムアウト | 要求ごとに指定する（補完は5秒、エラーチェックは15秒）。応答が無ければ失敗扱いとし、プロセスを停止する（次回の要求で再起動される） |
 | 異常終了 | `exit` / `error` を検知したら参照を破棄し、次回に再起動する |
 | 利用不可の判定 | ヘルパーのソースが無い、Java が使えない場合は `isUnavailable` を立てて以降は試行しない |
 | 終了処理 | `dispose()` で `QUIT` を送ってからプロセスを終了する |
 
 出力は `\n` 区切りで1行ずつ組み立てる（`receive()`）。
 
-## 6. 実装詳細（Java側：CompletionHelper.java）
+## 6. 実装詳細（Java側：AnalysisHelper.java の COMPLETE）
+
+エラーチェック（`CHECK`）の実装は [diagnostics.md](diagnostics.md) を参照。
 
 | 項目 | 内容 |
 |------|------|
@@ -114,7 +120,8 @@ graph LR
     同じメソッド内で宣言した変数のメンバーは候補に出ないことがある。
 - 初回の補完時にヘルパーを起動する。単一ファイルソースコードランチャーは実行時にコンパイルするため、
   **初回のみ数秒かかる**。以降は常駐プロセスが応答する。
-- VS Code を開いている間、Java のプロセスが1つ常駐する。
+- VS Code を開いている間、Java のプロセスが1つ常駐する（エラーチェックと共用）。
+- エラーチェックと同じプロセスで直列に処理するため、大きなファイルのチェック中（数百行で0.7秒程度）は補完の応答が待たされる。
 - 解析対象は最大20,000文字。これを超えるファイルでは、カーソル手前の範囲だけを解析する。
 
 ## 8. 今後の改善余地

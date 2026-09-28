@@ -59,6 +59,32 @@ Because the JShell analysis API is used, candidates are limited in the following
 
 * Inside a class body (for example within a method), candidates are computed from the current line only. Members of variables declared earlier in the same method may not appear.
 
+## ■ Error Highlighting
+
+Compile errors are underlined with a red squiggle while you type Java code.
+
+Hover over the squiggle to see the error message (in Japanese). Errors are also listed in the Problems panel.
+
+```java
+Test test = new Test(1111);   // <- "incompatible types: int cannot be converted to java.lang.String"
+```
+
+* The whole file is checked about 0.5 seconds after you stop typing.
+
+* The code is only compiled and is **never executed** (code that waits for input or loops forever is safe).
+
+* The check uses the same conditions as execution. Omitted imports such as `Scanner` or `List`, and the provided methods such as `input()`, are not reported as errors.
+
+* If a declaration has an error and a later line uses it, only the declaration is marked (the later line is not).
+
+* The check uses the Java bundled with this extension. On platforms other than Windows, java_home must be set.
+
+* You can turn error highlighting off in the settings.
+
+	* Location: Extensions >> JavaCodeSelectionRunner >> Enable diagnostics
+
+	* settings.json: `JavaCodeSelectionRunner.enable_diagnostics: false`
+
 ## ■ Formatting
 
 You can format Java code with google-java-format.

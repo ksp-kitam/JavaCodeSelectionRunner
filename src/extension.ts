@@ -7,6 +7,9 @@ import * as os from 'os';
 import { resolveJavaHome, getJavaCommandPath, quotePath, isWindows } from './javaHome';
 import { registerFormatter } from './formatter';
 import { registerCompletion } from './completion';
+import { registerDiagnostics } from './diagnostics';
+import { AnalysisHelper } from './analysisHelper';
+import { buildHelperMethods, replaceFullWidthSpace } from './sourceText';
 
 // 一時ファイルの接頭辞と拡張子（起動時の掃除にも使用する）
 const TEMP_FILE_PREFIX = 'vscode-extension-temp';
@@ -30,8 +33,15 @@ export function activate(context: vscode.ExtensionContext) {
 	// コード整形機能を登録する
 	registerFormatter(context);
 
+	// 入力補完とエラーチェックが共用する解析ヘルパー
+	const analysisHelper = new AnalysisHelper();
+	context.subscriptions.push({ dispose: () => analysisHelper.dispose() });
+
 	// 入力補完機能を登録する
-	registerCompletion(context);
+	registerCompletion(context, analysisHelper);
+
+	// エラーチェック機能を登録する（実行時と同じ便利メソッドを読み込んだうえでチェックする）
+	registerDiagnostics(context, analysisHelper, buildHelperMethods(inputCharset, os.EOL));
 
 	// 「JavaCodeSelectionRunner.RunCode」で実行される処理
 	let disposable = vscode.commands.registerCommand('JavaCodeSelectionRunner.RunCode', function () {
@@ -52,41 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
 		// 実行用のJshellスクリプトを作成する
 		
 		// 便利メソッドの追加
-		let text = ''; 
-		text = text + 'String input() { ' + os.EOL;
-		text = text + '    System.out.print("入力してEnterを押してください > ");' + os.EOL;
-		text = text + '    Scanner in = new Scanner(System.in, "' + inputCharset + '"); ' + os.EOL;
-		text = text + '    return in.nextLine(); ' + os.EOL;
-		text = text + '} ' + os.EOL;
-		
-		text = text + 'char inputToChar() { ' + os.EOL;
-		text = text + '    return input().charAt(0); ' + os.EOL;
-		text = text + '} ' + os.EOL;
-		
-		text = text + 'int inputToInt() { ' + os.EOL;
-		text = text + '    return Integer.parseInt(input()); ' + os.EOL;
-		text = text + '} ' + os.EOL;
-		
-		text = text + 'double inputToDouble() { ' + os.EOL;
-		text = text + '    return Double.parseDouble(input()); ' + os.EOL;
-		text = text + '} ' + os.EOL;
-		
-		text = text + 'long inputToLong() { ' + os.EOL;
-		text = text + '    return Long.parseLong(input()); ' + os.EOL;
-		text = text + '} ' + os.EOL;
-
-		text = text + 'float inputToFloat() { ' + os.EOL;
-		text = text + '    return Float.parseFloat(input()); ' + os.EOL;
-		text = text + '} ' + os.EOL;
-
-		text = text + 'short inputToShort() { ' + os.EOL;
-		text = text + '    return Short.parseShort(input()); ' + os.EOL;
-		text = text + '} ' + os.EOL;
-
-		text = text + 'int makeRandomValue(int start, int end) { ' + os.EOL;
-		text = text + '    java.util.Random rand = new java.util.Random(); ' + os.EOL;
-		text = text + '    return (rand.nextInt(end - start + 1) + start); ' + os.EOL;
-		text = text + '} ' + os.EOL;
+		let text = buildHelperMethods(inputCharset, os.EOL);
 
 		// コード実行前の固定メッセージを追加
 		text = text + 'System.out.println("[JavaCodeSelectionRunner]------------------start-----------------");' + os.EOL;
@@ -180,60 +156,6 @@ function cleanUpTempFiles() {
 		// 一時ディレクトリを参照できない場合も処理を継続する
 	}
 }
-
-// 文字列リテラル・文字リテラルを除いた範囲の全角スペースを半角スペースへ置換します。
-// （コード中の全角スペースはJavaの文法上エラーとなるため置換するが、
-// 　リテラル内の全角スペースは実行結果が変わってしまうため、そのまま残す）
-function replaceFullWidthSpace(code: string) {
-	let result = '';
-	// normal: コード / string: 文字列リテラル / char: 文字リテラル
-	// text: テキストブロック / line: 行コメント / block: ブロックコメント
-	let state: 'normal' | 'string' | 'char' | 'text' | 'line' | 'block' = 'normal';
-
-	for (let i = 0; i < code.length; i++) {
-		const current = code[i];
-		const next = code[i + 1];
-
-		if (state === 'normal') {
-			if (code.startsWith('"""', i)) { state = 'text'; result += '"""'; i += 2; continue; }
-			if (current === '"') { state = 'string'; result += current; continue; }
-			if (current === "'") { state = 'char'; result += current; continue; }
-			if (current === '/' && next === '/') { state = 'line'; result += '//'; i++; continue; }
-			if (current === '/' && next === '*') { state = 'block'; result += '/*'; i++; continue; }
-			result += (current === '　' ? ' ' : current);
-			continue;
-		}
-
-		if (state === 'string' || state === 'char') {
-			// エスケープシーケンスは2文字まとめて通す
-			if (current === '\\' && typeof next !== 'undefined') { result += current + next; i++; continue; }
-			if ((state === 'string' && current === '"') || (state === 'char' && current === "'")) { state = 'normal'; }
-			// リテラル内は置換しない
-			result += current;
-			continue;
-		}
-
-		if (state === 'text') {
-			if (code.startsWith('"""', i)) { state = 'normal'; result += '"""'; i += 2; continue; }
-			// テキストブロック内も置換しない
-			result += current;
-			continue;
-		}
-
-		if (state === 'line') {
-			if (current === '\n') { state = 'normal'; }
-			result += (current === '　' ? ' ' : current);
-			continue;
-		}
-
-		// state === 'block'
-		if (current === '*' && next === '/') { state = 'normal'; result += '*/'; i++; continue; }
-		result += (current === '　' ? ' ' : current);
-	}
-
-	return result;
-}
-
 
 // 文字列リテラル・文字リテラル・コメントの中身を空白へ置き換えた文字列を返します。
 // （波括弧の対応を数える際に、リテラルやコメント内の記号を誤って数えないようにするため）

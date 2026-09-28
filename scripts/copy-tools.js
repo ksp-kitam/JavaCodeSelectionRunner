@@ -1,11 +1,11 @@
 // ビルド時に、webpack の対象外のファイルを dist へ配置します。
-// 対象：補完ヘルパーのJavaソース
+// 対象：解析ヘルパー（入力補完・エラーチェック）のJavaソース
 const fs = require('fs');
 const path = require('path');
 
 const targets = [
-	{ from: path.join(__dirname, '..', 'src', 'java', 'CompletionHelper.java'),
-	  to:   path.join(__dirname, '..', 'dist', 'tools', 'CompletionHelper.java') }
+	{ from: path.join(__dirname, '..', 'src', 'java', 'AnalysisHelper.java'),
+	  to:   path.join(__dirname, '..', 'dist', 'tools', 'AnalysisHelper.java') }
 ];
 
 for (const target of targets) {
