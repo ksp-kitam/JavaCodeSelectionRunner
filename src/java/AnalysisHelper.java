@@ -4,8 +4,9 @@
 // VS Code 拡張機能から標準入出力で呼び出されます。
 //
 // プロトコル（1行1リクエスト・1行1レスポンス）
-//   要求: COMPLETE <カーソル位置> <Base64(UTF-8のコード)>
+//   要求: COMPLETE <カーソル位置> <Base64(UTF-8のコード)> <Base64(事前に読み込むコード)>
 //   応答: OK <アンカー位置> <Base64の候補1> <Base64の候補2> ...
+//         （事前に読み込むコードは省略可。v1.3.0 以前の形式との互換のため）
 //   要求: CHECK <Base64(事前に読み込むコード)> <Base64(チェックするコード)>
 //   応答: OK <Base64のエラー1> <Base64のエラー2> ...
 //         （エラー1件は「開始位置<TAB>終了位置<TAB>E または W<TAB>メッセージ」）
@@ -71,16 +72,19 @@ public class AnalysisHelper {
 	// 未解決の参照（例: "method bar(int)"）から名前を取り出すためのパターン
 	private static final Pattern UNRESOLVED_NAME = Pattern.compile("^(\\S+)\\s+([\\w$]+)");
 
+	// 補完用のJShell。カーソルより前の宣言を登録した状態で保持し、内容が変わらない間は使い回す
+	// （入力のたびに登録し直すと、大きなファイルで補完が遅くなるため）
+	private static JShell completionShell;
+	// completionShell に登録済みの内容（事前に読み込むコードと、カーソルより前のスニペット）
+	private static String completionShellKey;
+	// スニペットの切り出し専用のJShell（analyzeCompletion は登録内容に依存しないため共用する）
+	private static JShell splitterShell;
+
 	public static void main(String[] args) throws Exception {
 
 		// 入出力は UTF-8 に固定する
 		BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
 		PrintStream writer = new PrintStream(System.out, true, StandardCharsets.UTF_8);
-
-		// 補完専用のJShellを起動する（コードの実行は行わない）
-		// executionEngine に local を指定し、実行用の別プロセスを起動しないようにする
-		JShell jshell = JShell.builder().executionEngine("local").build();
-		SourceCodeAnalysis analysis = jshell.sourceCodeAnalysis();
 
 		String line;
 		while ((line = reader.readLine()) != null) {
@@ -95,10 +99,11 @@ public class AnalysisHelper {
 
 			try {
 				if (line.startsWith("COMPLETE ")) {
-					String[] parts = line.split(" ", 3);
+					String[] parts = line.split(" ", 4);
 					int cursor = Integer.parseInt(parts[1]);
 					String code = decode(parts[2]);
-					writer.println(complete(analysis, code, cursor));
+					String prelude = parts.length > 3 ? decode(parts[3]) : "";
+					writer.println(complete(code, cursor, prelude));
 
 				} else if (line.startsWith("CHECK ")) {
 					String[] parts = line.split(" ", 3);
@@ -115,24 +120,43 @@ public class AnalysisHelper {
 			}
 		}
 
-		jshell.close();
+		if (completionShell != null) {
+			completionShell.close();
+		}
+		if (splitterShell != null) {
+			splitterShell.close();
+		}
 	}
 
 
 	// ===== 入力補完 =====
 
 	// 補完候補を求めて応答文字列を組み立てます。
-	private static String complete(SourceCodeAnalysis analysis, String code, int cursor) {
+	// カーソルより前の完結したスニペット（クラス・変数の宣言など）を先にJShellへ登録してから、
+	// カーソルを含むスニペットについて候補を求める。
+	// （登録しないと、ファイル内で定義したクラスのメンバーなどが候補に出ないため）
+	private static String complete(String code, int cursor, String prelude) {
 
+		String target = code.substring(0, Math.min(Math.max(cursor, 0), code.length()));
+
+		// カーソルを含むスニペットの開始位置と、それより前のスニペットを求める
+		List<String> precedingSources = new ArrayList<>();
+		int snippetStart = splitCompleteSnippets(getSplitterShell().sourceCodeAnalysis(), target, precedingSources);
+
+		SourceCodeAnalysis analysis = getCompletionShell(prelude, precedingSources).sourceCodeAnalysis();
+
+		String snippet = target.substring(snippetStart);
 		int[] anchor = new int[1];
-		List<Suggestion> suggestions = analysis.completionSuggestions(code, cursor, anchor);
+		List<Suggestion> suggestions = analysis.completionSuggestions(snippet, snippet.length(), anchor);
+		// アンカー位置を元のコード上の位置へ戻す
+		anchor[0] = anchor[0] + snippetStart;
 
 		// 候補が得られなかった場合は、カーソル行だけを対象にして再度求める
-		// （クラス定義の途中など、ファイル全体では解析できない場合の保険）
+		// （クラス定義の途中など、スニペット全体では解析できない場合の保険）
 		if (suggestions.isEmpty()) {
-			int lineStart = code.lastIndexOf('\n', Math.max(cursor - 1, 0)) + 1;
-			if (lineStart > 0 && lineStart <= cursor) {
-				String lineCode = code.substring(lineStart, cursor);
+			int lineStart = target.lastIndexOf('\n', Math.max(target.length() - 1, 0)) + 1;
+			if (lineStart > snippetStart && lineStart <= target.length()) {
+				String lineCode = target.substring(lineStart);
 				anchor = new int[1];
 				suggestions = analysis.completionSuggestions(lineCode, lineCode.length(), anchor);
 				// アンカー位置を元のコード上の位置へ戻す
@@ -154,6 +178,87 @@ public class AnalysisHelper {
 		return "OK " + anchor[0] + (encoded.isEmpty() ? "" : " " + String.join(" ", encoded));
 	}
 
+	// コードの先頭から完結したスニペットを切り出して sources へ追加し、
+	// 最後の（カーソルを含む）スニペットの開始位置を返します。
+	// 文法エラー（UNKNOWN）や途中で終わっているスニペットがあれば、そこを最後のスニペットとみなします。
+	private static int splitCompleteSnippets(SourceCodeAnalysis analysis, String code, List<String> sources) {
+		int position = 0;
+		while (position < code.length()) {
+			String rest = code.substring(position);
+			CompletionInfo info = analysis.analyzeCompletion(rest);
+			Completeness completeness = info.completeness();
+
+			// 残りが空白やコメントだけの場合
+			if (completeness == Completeness.EMPTY) {
+				return code.length();
+			}
+			// UNKNOWN（文法エラー）も isComplete() は true を返すため、明示的に除く。
+			// 後ろに何も続かないスニペットは、入力中のものとして登録しない。
+			if (!completeness.isComplete() || completeness == Completeness.UNKNOWN || info.remaining().isBlank()) {
+				break;
+			}
+			int regionLength = rest.length() - info.remaining().length();
+			if (regionLength <= 0) {
+				break;
+			}
+			sources.add(info.source());
+			position += regionLength;
+		}
+		return position;
+	}
+
+	// 事前に読み込むコードと、カーソルより前のスニペットを登録した補完用のJShellを返します。
+	// 前回と同じ内容であれば、前回のJShellをそのまま使います。
+	private static JShell getCompletionShell(String prelude, List<String> precedingSources) {
+		String key = prelude + '\0' + String.join("\0", precedingSources);
+		if (completionShell != null && key.equals(completionShellKey)) {
+			return completionShell;
+		}
+
+		if (completionShell != null) {
+			completionShell.close();
+		}
+		completionShell = createNoExecutionShell();
+		completionShellKey = key;
+
+		loadDefaults(completionShell, prelude);
+		for (String source : precedingSources) {
+			completionShell.eval(source);
+		}
+		return completionShell;
+	}
+
+	// スニペットの切り出し専用のJShellを返します。
+	private static JShell getSplitterShell() {
+		if (splitterShell == null) {
+			splitterShell = createNoExecutionShell();
+		}
+		return splitterShell;
+	}
+
+
+	// ===== 共通 =====
+
+	// コードを実行しない（コンパイルだけ行う）JShellを作ります。
+	// 入出力も空にし、万一の出力が応答へ混ざらないようにします。
+	private static JShell createNoExecutionShell() {
+		PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
+		return JShell.builder()
+				.executionEngine(new NoExecutionProvider(), Map.of())
+				.in(new ByteArrayInputStream(new byte[0]))
+				.out(discard)
+				.err(discard)
+				.build();
+	}
+
+	// 実行時と同じ import と便利メソッドを読み込みます（ここでのエラーは報告しない）。
+	private static void loadDefaults(JShell jshell, String prelude) {
+		for (String defaultImport : DEFAULT_IMPORTS) {
+			jshell.eval(defaultImport);
+		}
+		new Checker(jshell, jshell.sourceCodeAnalysis(), prelude).run();
+	}
+
 
 	// ===== エラーチェック =====
 
@@ -161,22 +266,12 @@ public class AnalysisHelper {
 	// チェックのたびに新しいJShellを作る（前回までの定義が残って判定が変わらないようにするため）。
 	private static String check(String prelude, String code) {
 
-		PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
-
-		try (JShell jshell = JShell.builder()
-				.executionEngine(new NoExecutionProvider(), Map.of())
-				.in(new ByteArrayInputStream(new byte[0]))
-				.out(discard)
-				.err(discard)
-				.build()) {
+		try (JShell jshell = createNoExecutionShell()) {
 
 			SourceCodeAnalysis analysis = jshell.sourceCodeAnalysis();
 
-			// 実行時と同じ import と便利メソッドを読み込む（ここでのエラーは報告しない）
-			for (String defaultImport : DEFAULT_IMPORTS) {
-				jshell.eval(defaultImport);
-			}
-			new Checker(jshell, analysis, prelude).run();
+			// 実行時と同じ import と便利メソッドを読み込む
+			loadDefaults(jshell, prelude);
 
 			Checker checker = new Checker(jshell, analysis, code);
 			checker.run();

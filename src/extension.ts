@@ -37,11 +37,14 @@ export function activate(context: vscode.ExtensionContext) {
 	const analysisHelper = new AnalysisHelper();
 	context.subscriptions.push({ dispose: () => analysisHelper.dispose() });
 
-	// 入力補完機能を登録する
-	registerCompletion(context, analysisHelper);
+	// 実行時にあらかじめ定義される便利メソッド（補完とエラーチェックでも、実行時と同じ条件にするため読み込む）
+	const helperMethods = buildHelperMethods(inputCharset, os.EOL);
 
-	// エラーチェック機能を登録する（実行時と同じ便利メソッドを読み込んだうえでチェックする）
-	registerDiagnostics(context, analysisHelper, buildHelperMethods(inputCharset, os.EOL));
+	// 入力補完機能を登録する
+	registerCompletion(context, analysisHelper, helperMethods);
+
+	// エラーチェック機能を登録する
+	registerDiagnostics(context, analysisHelper, helperMethods);
 
 	// 「JavaCodeSelectionRunner.RunCode」で実行される処理
 	let disposable = vscode.commands.registerCommand('JavaCodeSelectionRunner.RunCode', function () {

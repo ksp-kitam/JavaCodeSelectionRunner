@@ -11,7 +11,8 @@ const MAX_ANALYZE_LENGTH = 20000;
 
 
 // 補完機能をVS Codeへ登録します。
-export function registerCompletion(context: vscode.ExtensionContext, helper: AnalysisHelper) {
+// prelude は実行時にあらかじめ定義される便利メソッドのコードで、補完の前に読み込みます（input() などの候補を出すため）。
+export function registerCompletion(context: vscode.ExtensionContext, helper: AnalysisHelper, prelude: string) {
 
 	const provider = vscode.languages.registerCompletionItemProvider(
 		'java',
@@ -44,7 +45,7 @@ export function registerCompletion(context: vscode.ExtensionContext, helper: Ana
 					return undefined;
 				}
 
-				const result = await requestCompletion(helper, code, code.length);
+				const result = await requestCompletion(helper, code, code.length, prelude);
 				if (typeof result === 'undefined' || token.isCancellationRequested) {
 					return undefined;
 				}
@@ -86,8 +87,12 @@ function guessCompletionKind(suggestion: string): vscode.CompletionItemKind {
 
 
 // 補完候補を取得します。取得できない場合は undefined を返します。
-async function requestCompletion(helper: AnalysisHelper, code: string, cursor: number) {
-	const response = await helper.request('complete', 'COMPLETE ' + cursor + ' ' + encodeBase64(code), RESPONSE_TIMEOUT_MS);
+async function requestCompletion(helper: AnalysisHelper, code: string, cursor: number, prelude: string) {
+	const response = await helper.request(
+		'complete',
+		'COMPLETE ' + cursor + ' ' + encodeBase64(code) + ' ' + encodeBase64(prelude),
+		RESPONSE_TIMEOUT_MS
+	);
 	return typeof response === 'undefined' ? undefined : parseResponse(response);
 }
 

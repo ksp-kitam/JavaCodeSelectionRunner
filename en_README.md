@@ -55,9 +55,15 @@ For example, typing `System.` shows `out` and `err` as candidates.
 
 Because the JShell analysis API is used, candidates are limited in the following ways.
 
-* Files written as a sequence of statements (such as `.jsh` files) get the best results.
+* Classes and variables declared above the cursor are reflected in the candidates (v1.3.1).
 
-* Inside a class body (for example within a method), candidates are computed from the current line only. Members of variables declared earlier in the same method may not appear.
+	For example, after writing `class Test { void ssssss() { } }` and `Test test = new Test();`, typing `test.` shows `ssssss()`.
+
+* The provided methods such as `input()` also appear as candidates.
+
+* The declarations are only compiled, never executed.
+
+* Inside a class body (for example within a method), candidates may not appear. In that case, candidates are computed from the current line only.
 
 ## ■ Error Highlighting
 
